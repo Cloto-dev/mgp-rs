@@ -13,6 +13,12 @@ pub struct RawUrlSpec {
     /// re-derive (binary releases, frozen tarballs).
     #[serde(default)]
     pub sha256: Option<String>,
+    /// Optional subdirectory inside the extracted archive tree where
+    /// the connector lives (after the consumer strips a single shared
+    /// top-level prefix, GitHub-archive-style). Lets one monorepo
+    /// tarball serve multiple connectors. Mirrors `GitSpec::subdir`.
+    #[serde(default)]
+    pub subdir: Option<String>,
 }
 
 impl RawUrlSpec {
