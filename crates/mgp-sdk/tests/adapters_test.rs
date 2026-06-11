@@ -35,18 +35,40 @@ fn raw_url_validation() {
     let ok = RawUrlSpec {
         url: "https://example.com/x.tar.gz".to_string(),
         sha256: Some("a".repeat(64)),
+        subdir: None,
     };
     assert!(ok.check().is_ok());
     let wrong_scheme = RawUrlSpec {
         url: "ftp://example.com/x".to_string(),
         sha256: None,
+        subdir: None,
     };
     assert!(wrong_scheme.check().is_err());
     let bad_hash = RawUrlSpec {
         url: "https://example.com/x".to_string(),
         sha256: Some("not-hex".to_string()),
+        subdir: None,
     };
     assert!(bad_hash.check().is_err());
+}
+
+#[test]
+fn raw_url_subdir_roundtrip_and_default() {
+    // Pre-0.3.0 JSON without `subdir` must deserialize (None).
+    let legacy: RawUrlSpec =
+        serde_json::from_str(r#"{"url":"https://example.com/x.tar.gz"}"#).unwrap();
+    assert_eq!(legacy.subdir, None);
+
+    // Round-trip preserves a set subdir.
+    let spec = RawUrlSpec {
+        url: "https://example.com/x.tar.gz".to_string(),
+        sha256: Some("a".repeat(64)),
+        subdir: Some("servers/cscheduler".to_string()),
+    };
+    assert!(spec.check().is_ok());
+    let json = serde_json::to_string(&spec).unwrap();
+    let back: RawUrlSpec = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, spec);
 }
 
 #[test]

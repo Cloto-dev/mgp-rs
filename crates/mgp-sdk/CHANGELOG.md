@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-11
+
+### Added
+
+- `RawUrlSpec.subdir: Option<String>` — optional subdirectory inside
+  the extracted archive tree where the connector lives (after the
+  consumer strips a single shared top-level prefix,
+  GitHub-archive-style). Lets one monorepo tarball serve multiple
+  connectors through a `raw_url` source; mirrors `GitSpec::subdir`.
+  Serde-defaulted, so existing manifests deserialize unchanged.
+
+  Minor (not patch) bump: adding a public field is a breaking change
+  for downstream code constructing `RawUrlSpec` with a struct
+  literal.
+
+## [0.2.0] - 2026-05-17
+
+### Added
+
+- (Backfilled entry — released as tag `mgp-sdk-v0.2.0`, PR #6.)
+  `InstallShape` on `RegistryEntry`, and `EnvVarDef` alias / default
+  support for registry shape conversion.
+
 ## [0.1.2] - 2026-05-11
 
 ### Changed
