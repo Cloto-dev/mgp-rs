@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-11
+
+### Added
+
+- `RegistryEntry.entry_point_sha256: Option<String>` — plain SHA-256
+  of the connector's entry-point file bytes, recorded by the catalog
+  when the seal was minted. Lets a consumer verify entry-point
+  integrity without holding the catalog's signing key (keyless
+  check); `seal` remains the cryptographic counterpart verified
+  catalog-side. Serde-defaulted; existing registries deserialize
+  unchanged. `manifest_to_registry_entry` emits `None` (the manifest
+  does not carry the hash — catalog emitters override it from their
+  seal records).
+
+  Minor bump: adding a public field breaks downstream struct-literal
+  construction of `RegistryEntry`.
+
 ## [0.3.0] - 2026-06-11
 
 ### Added

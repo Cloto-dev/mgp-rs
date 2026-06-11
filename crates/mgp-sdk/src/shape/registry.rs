@@ -100,6 +100,14 @@ pub struct RegistryEntry {
     /// MGP §8 L0 Magic Seal in `sha256:HEX` form.
     #[serde(default)]
     pub seal: Option<String>,
+    /// Plain SHA-256 (64 lowercase hex chars) of the connector's
+    /// entry-point file bytes, as recorded by the catalog when the
+    /// seal was minted. Lets a consumer verify the integrity of the
+    /// fetched entry point without holding the catalog's signing key
+    /// (keyless check); `seal` remains the cryptographic counterpart
+    /// that the catalog side verifies. New for `mgp-sdk` v0.4.0.
+    #[serde(default)]
+    pub entry_point_sha256: Option<String>,
     /// Optional install descriptor carrying `source` and `package_manager`
     /// from the originating `cloto-connector.json` manifest. `None` (or
     /// absent in JSON) signals that the catalog has no per-entry source
@@ -145,6 +153,9 @@ pub fn manifest_to_registry_entry(m: &ConnectorManifest) -> RegistryEntry {
         bin_name: m.install.bin_name.clone(),
         changelog: m.changelog.clone(),
         seal: Some(m.magic_seal.clone()),
+        // The manifest does not carry the entry-point hash; the catalog
+        // emitter overrides this from its seal records when available.
+        entry_point_sha256: None,
         // New in v0.2.0: carry through the install source + package_manager.
         // The flat `directory` / `runtime` / `bin_name` / `dependencies`
         // fields above stay populated for backward compatibility with
