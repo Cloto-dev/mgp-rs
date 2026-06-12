@@ -217,3 +217,47 @@ fn registry_entry_omitted_optional_fields_use_defaults_on_parse() {
     assert_eq!(entry.runtime, "python"); // default
     assert!(entry.seal.is_none());
 }
+
+#[test]
+fn registry_entry_signature_payload_defaults_to_none() {
+    // The manifest never carries the dual-signature record — only the
+    // catalog emitter (reading its seals table) populates it.
+    let entry = manifest_to_registry_entry(&manifest_with_full_optional_fields());
+    assert!(entry.signature_payload.is_none());
+
+    // Pre-v0.5 registry.json shape: no `signature_payload` field at all.
+    let pre_v05 = r#"{
+        "id": "legacy",
+        "name": "Legacy",
+        "description": "predates signature_payload field",
+        "category": "test",
+        "version": "0.1.0",
+        "directory": "legacy",
+        "runtime": "python"
+    }"#;
+    let entry: RegistryEntry = serde_json::from_str(pre_v05).expect("parse pre-v0.5");
+    assert!(entry.signature_payload.is_none());
+}
+
+#[test]
+fn registry_entry_signature_payload_round_trips_verbatim() {
+    // The catalog passes the issuer's dual-signature record through as
+    // opaque JSON; the consumer must receive it byte-equivalent so the
+    // Ed25519 sub-object verifies against the reconstructed canonical
+    // message. Unknown future tiers (e.g. "rekor") must survive too.
+    let payload = serde_json::json!({
+        "hmac": "ab".repeat(32),
+        "ed25519": {
+            "sig": "c2lnbmF0dXJlLWJ5dGVz",
+            "key_id": "clotohub-master-v1"
+        },
+        "rekor": { "log_index": 42 }
+    });
+
+    let mut entry = manifest_to_registry_entry(&manifest_with_full_optional_fields());
+    entry.signature_payload = Some(payload.clone());
+
+    let json = serde_json::to_string(&entry).expect("serialize");
+    let again: RegistryEntry = serde_json::from_str(&json).expect("parse");
+    assert_eq!(again.signature_payload, Some(payload));
+}

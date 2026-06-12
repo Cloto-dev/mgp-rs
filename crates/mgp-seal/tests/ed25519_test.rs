@@ -102,3 +102,89 @@ fn hmac_api_still_works_alongside_ed25519() {
     let ed_sig = sign(&sk, &kid, hmac_seal.as_bytes());
     assert!(verify(&pk, &kid, hmac_seal.as_bytes(), &ed_sig));
 }
+
+#[test]
+fn jwk_round_trip_through_public_key_from_jwk() {
+    // Full JWKS consumer workflow: serve a JWK, parse it back, verify a
+    // signature with the reconstructed key. This is the exact path ClotoCore
+    // takes against ClotoHub's /api/seal/keys.
+    use mgp_seal::ed25519::public_key_from_jwk;
+
+    let (sk, pk) = generate_keypair(&mut OsRng);
+    let kid = KeyId::new("clotohub-master-v1").unwrap();
+    let jwk = public_key_to_jwk(&pk, &kid);
+
+    let (parsed_pk, parsed_kid) = public_key_from_jwk(&jwk).unwrap();
+    assert_eq!(parsed_pk.to_bytes(), pk.to_bytes());
+    assert_eq!(parsed_kid.as_str(), kid.as_str());
+
+    let canonical = mgp_seal::canonical_message("cpersona", "2.4.21", &"ab".repeat(32));
+    let sig = sign(&sk, &kid, &canonical);
+    assert!(verify(&parsed_pk, &parsed_kid, &canonical, &sig));
+}
+
+#[test]
+fn public_key_from_jwk_ignores_annotation_fields() {
+    // ClotoHub annotates retired keys with `revoked_at`; parsing must not
+    // reject the extra field (trust policy for rotated keys is the caller's).
+    use mgp_seal::ed25519::public_key_from_jwk;
+
+    let (_, pk) = generate_keypair(&mut OsRng);
+    let kid = KeyId::new("clotohub-master-v0").unwrap();
+    let mut jwk = public_key_to_jwk(&pk, &kid);
+    jwk.as_object_mut()
+        .unwrap()
+        .insert("revoked_at".into(), "2026-06-01T00:00:00Z".into());
+
+    let (parsed_pk, parsed_kid) = public_key_from_jwk(&jwk).unwrap();
+    assert_eq!(parsed_pk.to_bytes(), pk.to_bytes());
+    assert_eq!(parsed_kid.as_str(), "clotohub-master-v0");
+}
+
+#[test]
+fn public_key_from_jwk_rejects_malformed_inputs() {
+    use mgp_seal::ed25519::public_key_from_jwk;
+    use serde_json::json;
+
+    let (_, pk) = generate_keypair(&mut OsRng);
+    let kid = KeyId::new("clotohub-master-v1").unwrap();
+    let good = public_key_to_jwk(&pk, &kid);
+
+    let mutate = |f: &str, v: serde_json::Value| {
+        let mut j = good.clone();
+        j.as_object_mut().unwrap().insert(f.into(), v);
+        j
+    };
+    let drop_field = |f: &str| {
+        let mut j = good.clone();
+        j.as_object_mut().unwrap().remove(f);
+        j
+    };
+
+    // Wrong key type / curve / algorithm / use.
+    assert!(public_key_from_jwk(&mutate("kty", json!("RSA"))).is_err());
+    assert!(public_key_from_jwk(&mutate("crv", json!("P-256"))).is_err());
+    assert!(public_key_from_jwk(&mutate("alg", json!("RS256"))).is_err());
+    assert!(public_key_from_jwk(&mutate("use", json!("enc"))).is_err());
+
+    // Missing mandatory fields. `alg` / `use` are optional and may be absent.
+    assert!(public_key_from_jwk(&drop_field("kty")).is_err());
+    assert!(public_key_from_jwk(&drop_field("crv")).is_err());
+    assert!(public_key_from_jwk(&drop_field("kid")).is_err());
+    assert!(public_key_from_jwk(&drop_field("x")).is_err());
+    assert!(public_key_from_jwk(&drop_field("alg")).is_ok());
+    assert!(public_key_from_jwk(&drop_field("use")).is_ok());
+
+    // `x` must be base64url-no-pad of exactly 32 valid key bytes. The
+    // STANDARD-alphabet padded form (what PublicKey::to_base64 emits) must
+    // be rejected here — the two wire formats are deliberately distinct.
+    assert!(public_key_from_jwk(&mutate("x", json!("!!!not-base64!!!"))).is_err());
+    assert!(public_key_from_jwk(&mutate("x", json!(URL_SAFE_NO_PAD.encode([0u8; 16])))).is_err());
+    let padded_standard = pk.to_base64();
+    if padded_standard.contains('=')
+        || padded_standard.contains('+')
+        || padded_standard.contains('/')
+    {
+        assert!(public_key_from_jwk(&mutate("x", json!(padded_standard))).is_err());
+    }
+}

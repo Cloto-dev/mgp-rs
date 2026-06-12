@@ -30,21 +30,26 @@
 //!   (Tier 1: HMAC-SHA256 oracle)
 //! - [`ed25519`] — `generate_keypair`, `sign`, `verify`, JWK serialization
 //!   (Tier 2: asymmetric Ed25519 for offline verification, added in v0.2.0)
+//! - [`canonical`] — [`canonical_message`], the catalog seal record signing
+//!   message shared between issuer and verifier (added in v0.3.0)
 //! - [`key`] — [`load_or_generate_seal_key`]
 //! - [`trust`] — [`TrustLevel`] enum (MGP §2)
 //!
-//! Top-level re-exports are provided for the common HMAC API surface. The
-//! Ed25519 surface is intentionally namespaced — `mgp_seal::ed25519::sign`
-//! reads more clearly at call sites than a flat `mgp_seal::sign`.
+//! Top-level re-exports are provided for the common HMAC API surface and the
+//! canonical-message helpers (used by both tiers). The Ed25519 surface is
+//! intentionally namespaced — `mgp_seal::ed25519::sign` reads more clearly at
+//! call sites than a flat `mgp_seal::sign`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod canonical;
 pub mod ed25519;
 pub mod key;
 pub mod seal;
 pub mod trust;
 
+pub use canonical::{canonical_message, validate_entry_point_sha256};
 pub use key::load_or_generate_seal_key;
 pub use seal::{check_seal, compute_seal, verify_seal, SealStatus};
 pub use trust::TrustLevel;

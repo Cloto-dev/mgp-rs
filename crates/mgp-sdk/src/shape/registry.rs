@@ -108,6 +108,20 @@ pub struct RegistryEntry {
     /// that the catalog side verifies. New for `mgp-sdk` v0.4.0.
     #[serde(default)]
     pub entry_point_sha256: Option<String>,
+    /// The catalog's dual-signature record for the seal, passed through
+    /// verbatim from the issuer:
+    /// `{"hmac": "<hex>", "ed25519": {"sig": "<base64>", "key_id": "..."}}`.
+    ///
+    /// A consumer holding the issuer's Ed25519 public key (from its JWKS
+    /// endpoint, parsed via `mgp_seal::ed25519::public_key_from_jwk`) can
+    /// reconstruct `mgp_seal::canonical_message(id, version,
+    /// entry_point_sha256)` and verify the `ed25519.sig` offline — without
+    /// trusting the transport the catalog arrived over. Kept as opaque JSON
+    /// rather than typed fields so future signature tiers (e.g. a Rekor
+    /// inclusion proof) ride along without another schema change. New for
+    /// `mgp-sdk` v0.5.0.
+    #[serde(default)]
+    pub signature_payload: Option<serde_json::Value>,
     /// Optional install descriptor carrying `source` and `package_manager`
     /// from the originating `cloto-connector.json` manifest. `None` (or
     /// absent in JSON) signals that the catalog has no per-entry source
@@ -153,9 +167,11 @@ pub fn manifest_to_registry_entry(m: &ConnectorManifest) -> RegistryEntry {
         bin_name: m.install.bin_name.clone(),
         changelog: m.changelog.clone(),
         seal: Some(m.magic_seal.clone()),
-        // The manifest does not carry the entry-point hash; the catalog
-        // emitter overrides this from its seal records when available.
+        // The manifest carries neither the entry-point hash nor the
+        // dual-signature record; the catalog emitter overrides both from
+        // its seal records when available.
         entry_point_sha256: None,
+        signature_payload: None,
         // New in v0.2.0: carry through the install source + package_manager.
         // The flat `directory` / `runtime` / `bin_name` / `dependencies`
         // fields above stay populated for backward compatibility with
