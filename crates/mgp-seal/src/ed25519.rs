@@ -275,6 +275,64 @@ pub fn public_key_to_jwk(key: &PublicKey, key_id: &KeyId) -> serde_json::Value {
     })
 }
 
+/// Parse a single RFC 8037 §2 OKP/Ed25519 JWK back into a usable
+/// `(PublicKey, KeyId)` pair — the inverse of [`public_key_to_jwk`].
+///
+/// This is what a JWKS consumer (e.g. ClotoCore fetching ClotoHub's
+/// `/api/seal/keys`) calls on each element of the `keys` array before
+/// verifying seal signatures offline with [`verify`].
+///
+/// Validation is strict: `kty` must be `OKP`, `crv` must be `Ed25519`,
+/// and when the optional `alg` / `use` fields are present they must be
+/// `EdDSA` / `sig` respectively. The mandatory `x` field is decoded as
+/// base64url-no-pad (note: *not* the standard alphabet that
+/// [`PublicKey::from_base64`] expects) and must yield exactly 32 valid
+/// public-key bytes.
+///
+/// Extra fields (e.g. a JWKS server annotating retired keys with
+/// `revoked_at`) are ignored here — whether to trust a rotated-out key
+/// is caller policy, not a parsing concern.
+pub fn public_key_from_jwk(jwk: &serde_json::Value) -> Result<(PublicKey, KeyId)> {
+    let field = |name: &str| jwk.get(name).and_then(serde_json::Value::as_str);
+
+    match field("kty") {
+        Some("OKP") => {}
+        Some(other) => bail!("JWK `kty` must be \"OKP\" (got {other:?})"),
+        None => bail!("JWK is missing the `kty` field"),
+    }
+    match field("crv") {
+        Some("Ed25519") => {}
+        Some(other) => bail!("JWK `crv` must be \"Ed25519\" (got {other:?})"),
+        None => bail!("JWK is missing the `crv` field"),
+    }
+    if let Some(alg) = field("alg") {
+        if alg != "EdDSA" {
+            bail!("JWK `alg` must be \"EdDSA\" when present (got {alg:?})");
+        }
+    }
+    if let Some(usage) = field("use") {
+        if usage != "sig" {
+            bail!("JWK `use` must be \"sig\" when present (got {usage:?})");
+        }
+    }
+
+    let kid = field("kid").ok_or_else(|| anyhow!("JWK is missing the `kid` field"))?;
+    let key_id = KeyId::new(kid)?;
+
+    let x = field("x").ok_or_else(|| anyhow!("JWK is missing the `x` field"))?;
+    let raw = URL_SAFE_NO_PAD
+        .decode(x)
+        .context("JWK `x` is not valid base64url-no-pad")?;
+    let arr: [u8; PUBLIC_KEY_LENGTH] = raw.try_into().map_err(|v: Vec<u8>| {
+        anyhow!(
+            "JWK `x` must decode to exactly {PUBLIC_KEY_LENGTH} bytes (got {})",
+            v.len()
+        )
+    })?;
+    let vk = VerifyingKey::from_bytes(&arr).context("JWK `x` is not a valid Ed25519 public key")?;
+    Ok((PublicKey(vk), key_id))
+}
+
 /// Decode a private key from base64 (standard alphabet, padded; 32 raw secret
 /// bytes — the Ed25519 seed, not the expanded scalar).
 ///
