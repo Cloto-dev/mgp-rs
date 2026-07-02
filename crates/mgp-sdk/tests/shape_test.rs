@@ -2,7 +2,7 @@
 
 use mgp_sdk::adapters::{GitSpec, SourceSpec};
 use mgp_sdk::shape::{manifest_to_registry_entry, InstallShape, RegistryEntry};
-use mgp_sdk::types::{ConnectorManifest, EnvVarDef, InstallSpec};
+use mgp_sdk::types::{ConnectorManifest, EnvVarDef, InstallSpec, ProviderMeta, ProviderQuirks};
 
 fn manifest_with_full_optional_fields() -> ConnectorManifest {
     ConnectorManifest {
@@ -43,6 +43,18 @@ fn manifest_with_full_optional_fields() -> ConnectorManifest {
         }],
         auto_restart: true,
         changelog: Some("v1.2.3 release".to_string()),
+        provider: Some(ProviderMeta {
+            api_url: "https://api.example.com/v1/chat/completions".to_string(),
+            auth_type: "x-api-key".to_string(),
+            model_default: Some("demo-model".to_string()),
+            timeout_secs: Some(90),
+            model_placeholder: Some("org/demo-model".to_string()),
+            quirks: Some(ProviderQuirks {
+                no_api_key: false,
+                models_endpoint_path: Some("/v1/models".to_string()),
+                switch_model_tool: None,
+            }),
+        }),
     }
 }
 
@@ -73,6 +85,45 @@ fn manifest_to_registry_entry_preserves_all_fields() {
     let install = entry.install.as_ref().expect("install populated");
     assert_eq!(install.source, m.install.source);
     assert_eq!(install.package_manager.as_deref(), Some("uv"));
+
+    // v0.6.0: engine provider metadata carries through verbatim.
+    assert_eq!(entry.provider, m.provider);
+}
+
+#[test]
+fn registry_entry_without_provider_parses_as_none() {
+    // Non-engine (or pre-v0.6) entries omit `provider` entirely; it must
+    // deserialize as None so the host falls back to its existing behavior.
+    let no_provider = r#"{
+        "id": "not-an-engine",
+        "name": "Tool",
+        "description": "a non-engine connector",
+        "category": "tool",
+        "version": "0.1.0"
+    }"#;
+    let entry: RegistryEntry = serde_json::from_str(no_provider).expect("parse without provider");
+    assert!(entry.provider.is_none());
+
+    // A non-engine manifest also converts to an entry with no provider block.
+    let mut m = manifest_with_full_optional_fields();
+    m.provider = None;
+    assert!(manifest_to_registry_entry(&m).provider.is_none());
+}
+
+#[test]
+fn registry_entry_provider_round_trips_through_json() {
+    let entry = manifest_to_registry_entry(&manifest_with_full_optional_fields());
+    let json = serde_json::to_string(&entry).expect("serialize");
+    let again: RegistryEntry = serde_json::from_str(&json).expect("parse");
+    let p = again.provider.expect("provider present after round-trip");
+    assert_eq!(p.api_url, "https://api.example.com/v1/chat/completions");
+    assert_eq!(p.auth_type, "x-api-key");
+    assert_eq!(p.model_default.as_deref(), Some("demo-model"));
+    assert_eq!(p.timeout_secs, Some(90));
+    assert_eq!(p.model_placeholder.as_deref(), Some("org/demo-model"));
+    let q = p.quirks.expect("quirks present");
+    assert_eq!(q.models_endpoint_path.as_deref(), Some("/v1/models"));
+    assert!(!q.no_api_key);
 }
 
 #[test]

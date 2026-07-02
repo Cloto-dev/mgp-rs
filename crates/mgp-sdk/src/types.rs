@@ -54,6 +54,65 @@ pub struct ConnectorManifest {
     /// Optional CHANGELOG content.
     #[serde(default)]
     pub changelog: Option<String>,
+    /// Optional LLM-provider metadata for reasoning-engine connectors
+    /// (`category = "mind"`). When present, the host seeds/refreshes its
+    /// per-provider credential row (upstream API URL, auth style, default
+    /// model, quirks) from this block instead of a hard-coded table — so a
+    /// new engine needs only a catalog entry, no host change. `None` for
+    /// non-engine connectors. New for `mgp-sdk` v0.6.0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderMeta>,
+}
+
+/// LLM-provider metadata declared by a reasoning-engine connector.
+///
+/// Carries only *metadata* (upstream endpoint, auth style, default model,
+/// example model id, quirks) — never user secrets. The host merges this into
+/// its provider registry without overwriting user-set fields (API key, chosen
+/// model, context length, thinking mode).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderMeta {
+    /// Upstream provider API URL
+    /// (e.g. `https://api.deepseek.com/chat/completions`).
+    pub api_url: String,
+    /// Auth header style: `"bearer"` (default) or `"x-api-key"` (Anthropic-style).
+    #[serde(default = "default_auth_type")]
+    pub auth_type: String,
+    /// Default model id seeded when the provider row is first created. The host
+    /// MUST NOT overwrite an existing user-chosen model with this value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_default: Option<String>,
+    /// Request timeout (seconds) for calls to this provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u32>,
+    /// Example model id for the host's model-input placeholder
+    /// (e.g. LM Studio's `org/name` vs Ollama's `name:tag`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_placeholder: Option<String>,
+    /// Provider-specific quirks the host needs to talk to this backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quirks: Option<ProviderQuirks>,
+}
+
+/// Provider quirks declared as data so the host needs no provider-specific
+/// branches (mirrors ClotoCore's `ProviderQuirks`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderQuirks {
+    /// Provider does not require an API key (Ollama, local LM Studio).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_api_key: bool,
+    /// Native models-list path (absolute URL path, e.g. `/api/tags`) that
+    /// overrides the OpenAI-compatible `.../models` derivation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models_endpoint_path: Option<String>,
+    /// MCP tool name on the engine server to relay a live model switch, for
+    /// providers whose engine binds the model at startup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch_model_tool: Option<String>,
+}
+
+fn default_auth_type() -> String {
+    "bearer".to_string()
 }
 
 /// Install / runtime declaration block.
