@@ -28,7 +28,7 @@ pub mod shape;
 pub mod types;
 pub mod validate;
 
-pub use types::ConnectorManifest;
+pub use types::{ConnectorManifest, ProviderMeta, ProviderQuirks};
 pub use validate::ValidationError;
 
 /// Spec version this SDK targets.

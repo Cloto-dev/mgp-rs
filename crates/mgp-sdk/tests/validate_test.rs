@@ -35,6 +35,7 @@ fn good_manifest() -> ConnectorManifest {
         optional_env_vars: vec![],
         auto_restart: false,
         changelog: None,
+        provider: None,
     }
 }
 

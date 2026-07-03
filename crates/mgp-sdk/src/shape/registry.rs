@@ -10,7 +10,7 @@
 //! wire shape, and future schema changes land here.
 
 use crate::adapters::SourceSpec;
-use crate::types::{ConnectorManifest, EnvVarDef};
+use crate::types::{ConnectorManifest, EnvVarDef, ProviderMeta};
 use serde::{Deserialize, Serialize};
 
 /// Install descriptor carried by [`RegistryEntry`].
@@ -130,6 +130,12 @@ pub struct RegistryEntry {
     /// monorepo tarball). New for `mgp-sdk` v0.2.0; see [`InstallShape`].
     #[serde(default)]
     pub install: Option<InstallShape>,
+    /// LLM-provider metadata for reasoning-engine entries (`category =
+    /// "mind"`), carried through from the connector manifest so the host can
+    /// seed its provider registry from the catalog rather than a hard-coded
+    /// table. `None` for non-engine entries. New for `mgp-sdk` v0.6.0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderMeta>,
 }
 
 fn default_trust_level() -> String {
@@ -180,5 +186,8 @@ pub fn manifest_to_registry_entry(m: &ConnectorManifest) -> RegistryEntry {
             source: m.install.source.clone(),
             package_manager: Some(m.install.package_manager.clone()),
         }),
+        // Carry engine provider metadata through to the catalog wire so the
+        // host can seed its provider registry from the entry (v0.6.0).
+        provider: m.provider.clone(),
     }
 }
