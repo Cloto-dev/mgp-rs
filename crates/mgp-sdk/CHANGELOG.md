@@ -6,6 +6,40 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-05
+
+### Changed
+
+- `validate_v1` connector-id check widened to the MGP_CONNECTOR.md §3.3
+  charset `[a-z0-9]([a-z0-9_-]*[a-z0-9])?` — underscores join hyphens
+  (kebab-case becomes the recommended style rather than the only legal
+  one), so host-side snake_case server ids (`agent_utils`) validate
+  unchanged. Purely additive: every previously valid id remains valid;
+  leading/trailing separators of either kind are still rejected. The
+  `InvalidId` error message updated to match. Lock-step with the
+  mgp-spec connector v1 schema change of the same date (spec-first per
+  the SDK leniency taxonomy — the validator follows the spec, never
+  leads it).
+
+## [0.6.0] - 2026-07-03
+
+### Added
+
+- (backfilled entry) `ProviderMeta` / `ProviderQuirks` and
+  `provider: Option<ProviderMeta>` on `ConnectorManifest` and
+  `RegistryEntry`, mapped through `manifest_to_registry_entry` — LLM
+  provider metadata (api_url / auth_type / model defaults / quirks)
+  carried on the catalog wire for host-side ingest. Serde-defaulted,
+  backward compatible.
+
+## [0.5.0] - 2026-06-12
+
+### Added
+
+- (backfilled entry) Ed25519 catalog-seal verification support on the
+  registry shape, shipped with mgp-seal v0.3.0 (Tier 2 keyless
+  catalog-seal verification primitives).
+
 ## [0.4.0] - 2026-06-11
 
 ### Added

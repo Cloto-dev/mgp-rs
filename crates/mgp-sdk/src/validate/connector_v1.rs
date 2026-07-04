@@ -27,7 +27,7 @@ pub fn validate_v1(manifest: &ConnectorManifest) -> Result<(), ValidationError> 
             manifest.connector_type.clone(),
         ));
     }
-    if !is_kebab_case_id(&manifest.id) {
+    if !is_well_formed_id(&manifest.id) {
         return Err(ValidationError::InvalidId);
     }
     if !TRUST_LEVELS.contains(&manifest.trust_level.as_str()) {
@@ -66,14 +66,19 @@ fn validate_source(source: &SourceSpec) -> Result<(), ValidationError> {
     Ok(())
 }
 
-fn is_kebab_case_id(id: &str) -> bool {
+/// Connector id charset per MGP_CONNECTOR.md §3.3:
+/// `[a-z0-9]([a-z0-9_-]*[a-z0-9])?`. kebab-case is the RECOMMENDED style;
+/// underscores are equally legal so host-side server ids (snake_case on
+/// Python-centric hosts) flow through unchanged. First and last characters
+/// must be alphanumeric — no leading/trailing separator of either kind.
+fn is_well_formed_id(id: &str) -> bool {
     if id.is_empty() {
         return false;
     }
     id.chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        && !id.starts_with('-')
-        && !id.ends_with('-')
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        && id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && id.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
 }
 
 fn is_well_formed_seal(seal: &str) -> bool {

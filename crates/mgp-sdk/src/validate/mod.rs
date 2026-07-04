@@ -27,8 +27,11 @@ pub enum ValidationError {
     /// `trust_level` not in MGP §2.3 4-tier set.
     #[error("trust_level must be one of core|standard|experimental|untrusted, got `{0}`")]
     UnsupportedTrustLevel(String),
-    /// `id` empty or non-kebab-case.
-    #[error("connector id must be non-empty kebab-case")]
+    /// `id` empty or outside the MGP_CONNECTOR.md §3.3 charset
+    /// (`[a-z0-9]([a-z0-9_-]*[a-z0-9])?`).
+    #[error(
+        "connector id must be non-empty lowercase alphanumeric with interior hyphens/underscores"
+    )]
     InvalidId,
     /// Source-spec sub-validation failed.
     #[error("invalid source ({kind}): {reason}")]
