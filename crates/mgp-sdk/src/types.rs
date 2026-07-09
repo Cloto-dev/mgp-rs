@@ -15,7 +15,8 @@ pub struct ConnectorManifest {
     pub spec_version: u32,
     /// Connector kind. v1 only accepts `"mgp_server"`.
     pub connector_type: String,
-    /// Stable connector identifier (kebab-case).
+    /// Stable connector identifier (`[a-z0-9]([a-z0-9_-]*[a-z0-9])?`,
+    /// MGP_CONNECTOR.md §3.3 — kebab-case recommended, underscores legal).
     pub id: String,
     /// Human-readable name.
     pub name: String,

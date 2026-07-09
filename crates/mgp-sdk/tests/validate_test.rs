@@ -122,14 +122,32 @@ fn rejects_unknown_trust_level() {
 }
 
 #[test]
-fn rejects_non_kebab_id() {
+fn rejects_ids_outside_charset() {
     let mut m = good_manifest();
-    m.id = "Demo_Server".to_string();
+    m.id = "Demo_Server".to_string(); // uppercase
     assert_eq!(validate_v1(&m), Err(ValidationError::InvalidId));
     m.id = String::new();
     assert_eq!(validate_v1(&m), Err(ValidationError::InvalidId));
     m.id = "-leading".to_string();
     assert_eq!(validate_v1(&m), Err(ValidationError::InvalidId));
+    m.id = "_leading".to_string();
+    assert_eq!(validate_v1(&m), Err(ValidationError::InvalidId));
+    m.id = "trailing_".to_string();
+    assert_eq!(validate_v1(&m), Err(ValidationError::InvalidId));
+    m.id = "dotted.id".to_string();
+    assert_eq!(validate_v1(&m), Err(ValidationError::InvalidId));
+}
+
+#[test]
+fn accepts_snake_and_kebab_ids() {
+    // MGP_CONNECTOR.md §3.3: underscores joined hyphens in the id charset
+    // (2026-07-05 additive change) so host-side snake_case server ids flow
+    // through unchanged.
+    for id in ["agent_utils", "agent-utils", "a", "a2", "mixed_style-id"] {
+        let mut m = good_manifest();
+        m.id = id.to_string();
+        assert_eq!(validate_v1(&m), Ok(()), "id `{id}` must validate");
+    }
 }
 
 #[test]
