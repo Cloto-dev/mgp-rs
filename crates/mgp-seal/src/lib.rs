@@ -49,7 +49,9 @@ pub mod key;
 pub mod seal;
 pub mod trust;
 
-pub use canonical::{canonical_message, validate_entry_point_sha256};
+pub use canonical::{
+    canonical_message, canonical_message_v2, validate_archive_sha256, validate_entry_point_sha256,
+};
 pub use key::load_or_generate_seal_key;
 pub use seal::{check_seal, compute_seal, verify_seal, SealStatus};
 pub use trust::TrustLevel;
