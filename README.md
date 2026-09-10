@@ -17,8 +17,8 @@ maintenance loss.
 
 | Crate | Latest | Role |
 |---|---|---|
-| [`mgp-seal`](crates/mgp-seal/) | `v0.2.0` | MGP §8 L0 Magic Seal — HMAC-SHA256 (Tier 1) + Ed25519 (Tier 2) integrity verification |
-| [`mgp-sdk`](crates/mgp-sdk/)   | `v0.1.0` | `cloto-connector.json` v1 types, validation, adapters, registry shape |
+| [`mgp-seal`](crates/mgp-seal/) | `v0.4.1` | MGP §8 L0 Magic Seal — HMAC-SHA256 (Tier 1) + Ed25519 (Tier 2) integrity verification |
+| [`mgp-sdk`](crates/mgp-sdk/)   | `v0.7.0` | `cloto-connector.json` v1 types, validation, adapters, registry shape |
 
 ## Tag conventions
 

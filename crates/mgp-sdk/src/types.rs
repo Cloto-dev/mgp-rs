@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 pub struct ConnectorManifest {
     /// Manifest schema version. Must equal `1` for v1.
     pub spec_version: u32,
-    /// Connector kind. v1 only accepts `"mgp_server"`.
+    /// Connector kind: `"mgp_server"` (the host starts a process) or
+    /// `"ui_module"` (the host serves the files and starts nothing).
+    /// MGP_CONNECTOR.md §3.4.
     pub connector_type: String,
     /// Stable connector identifier (`[a-z0-9]([a-z0-9_-]*[a-z0-9])?`,
     /// MGP_CONNECTOR.md §3.3 — kebab-case recommended, underscores legal).
@@ -55,6 +57,11 @@ pub struct ConnectorManifest {
     /// Optional CHANGELOG content.
     #[serde(default)]
     pub changelog: Option<String>,
+    /// Panels this connector ships for the host to serve
+    /// (MGP_CONNECTOR.md §4.1). Independent of `connector_type`: a server
+    /// may ship a panel, and a `ui_module` ships nothing else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui: Option<UiBlock>,
     /// Optional LLM-provider metadata for reasoning-engine connectors
     /// (`category = "mind"`). When present, the host seeds/refreshes its
     /// per-provider credential row (upstream API URL, auth style, default
@@ -114,6 +121,55 @@ pub struct ProviderQuirks {
 
 fn default_auth_type() -> String {
     "bearer".to_string()
+}
+
+/// Panels a connector ships for the host to serve (MGP_CONNECTOR.md §4.1).
+///
+/// Deserialized rather than ignored because the schema documents it: a block
+/// the reference implementation drops silently is the drift the connector
+/// document exists to prevent, and a host reading a manifest through this SDK
+/// would otherwise see a connector with no face.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UiBlock {
+    /// Panels the host lists and serves.
+    #[serde(default)]
+    pub panels: Vec<PanelDeclaration>,
+}
+
+/// One panel a connector ships.
+///
+/// The id is scoped to its connector — a host listing panels from several
+/// connectors namespaces them, because a panel id is only unique inside the
+/// connector that ships it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PanelDeclaration {
+    /// Panel identifier, unique within this connector.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// Short description for the host's UI.
+    #[serde(default)]
+    pub description: String,
+    /// Panel version, independent of the connector's.
+    #[serde(default)]
+    pub version: String,
+    /// Document the host loads, relative to the manifest's directory.
+    #[serde(default = "default_panel_entry")]
+    pub entry: String,
+    /// Icon hint for the host's UI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Host requests this panel may make, each `"<METHOD> <path>"`.
+    ///
+    /// Declaring is not granting: the manifest is written by the connector's
+    /// author, so a host narrows this list by its own policy and never widens
+    /// it.
+    #[serde(default)]
+    pub requires: Vec<String>,
+}
+
+fn default_panel_entry() -> String {
+    "index.html".to_string()
 }
 
 /// Install / runtime declaration block.

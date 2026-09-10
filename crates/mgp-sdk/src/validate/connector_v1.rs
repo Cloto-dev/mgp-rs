@@ -3,10 +3,27 @@
 use super::ValidationError;
 use crate::adapters::SourceSpec;
 use crate::types::ConnectorManifest;
-use crate::{CONNECTOR_TYPE_MGP_SERVER, PACKAGE_MANAGER_UV, SPEC_VERSION};
+use crate::{
+    CONNECTOR_TYPE_MGP_SERVER, CONNECTOR_TYPE_UI_MODULE, PACKAGE_MANAGER_NONE, PACKAGE_MANAGER_UV,
+    RUNTIME_STATIC, SPEC_VERSION,
+};
 
 const TRUST_LEVELS: &[&str] = &["core", "standard", "experimental", "untrusted"];
-const RUNTIMES: &[&str] = &["python", "rust", "node"];
+/// Runtimes a host launches, plus `static` for the connectors it does not.
+const RUNTIMES: &[&str] = &["python", "rust", "node", RUNTIME_STATIC];
+/// Types v1 defines (MGP_CONNECTOR.md §3.4).
+const CONNECTOR_TYPES: &[&str] = &[CONNECTOR_TYPE_MGP_SERVER, CONNECTOR_TYPE_UI_MODULE];
+/// Package managers v1 defines.
+const PACKAGE_MANAGERS: &[&str] = &[PACKAGE_MANAGER_UV, PACKAGE_MANAGER_NONE];
+
+/// Whether a type is one the host starts a process for.
+///
+/// Separate from "is this type known" on purpose: the two questions had the
+/// same answer for every type v1 shipped with, and a `ui_module` is the first
+/// one where they differ (§3.4).
+fn launches_a_process(connector_type: &str) -> bool {
+    connector_type == CONNECTOR_TYPE_MGP_SERVER
+}
 
 /// Validate a `cloto-connector.json` v1 manifest. Pure logic — no IO.
 ///
@@ -22,7 +39,7 @@ pub fn validate_v1(manifest: &ConnectorManifest) -> Result<(), ValidationError> 
             manifest.spec_version,
         ));
     }
-    if manifest.connector_type != CONNECTOR_TYPE_MGP_SERVER {
+    if !CONNECTOR_TYPES.contains(&manifest.connector_type.as_str()) {
         return Err(ValidationError::UnsupportedConnectorType(
             manifest.connector_type.clone(),
         ));
@@ -38,7 +55,7 @@ pub fn validate_v1(manifest: &ConnectorManifest) -> Result<(), ValidationError> 
     if !is_well_formed_seal(&manifest.magic_seal) {
         return Err(ValidationError::MalformedMagicSeal);
     }
-    if manifest.install.package_manager != PACKAGE_MANAGER_UV {
+    if !PACKAGE_MANAGERS.contains(&manifest.install.package_manager.as_str()) {
         return Err(ValidationError::UnsupportedPackageManager(
             manifest.install.package_manager.clone(),
         ));
@@ -48,7 +65,66 @@ pub fn validate_v1(manifest: &ConnectorManifest) -> Result<(), ValidationError> 
             manifest.install.runtime.clone(),
         ));
     }
+    validate_install_matches_type(manifest)?;
     validate_source(&manifest.install.source)?;
+    validate_panels(manifest)?;
+    Ok(())
+}
+
+/// The §5 pairing: what the host does with the connector decides what the
+/// install block may say.
+///
+/// Checked after the two value checks above so a nonsense value reports itself
+/// rather than being read as the wrong half of a pair.
+fn validate_install_matches_type(manifest: &ConnectorManifest) -> Result<(), ValidationError> {
+    let launches = launches_a_process(&manifest.connector_type);
+    let pm = manifest.install.package_manager.as_str();
+    let runtime = manifest.install.runtime.as_str();
+
+    let agrees = if launches {
+        pm != PACKAGE_MANAGER_NONE && runtime != RUNTIME_STATIC
+    } else {
+        pm == PACKAGE_MANAGER_NONE && runtime == RUNTIME_STATIC
+    };
+    if agrees {
+        return Ok(());
+    }
+    Err(ValidationError::InstallDisagreesWithType {
+        connector_type: manifest.connector_type.clone(),
+        package_manager: manifest.install.package_manager.clone(),
+        runtime: manifest.install.runtime.clone(),
+        expected_package_manager: if launches {
+            PACKAGE_MANAGER_UV
+        } else {
+            PACKAGE_MANAGER_NONE
+        },
+        expected_runtime: if launches {
+            "python|rust|node"
+        } else {
+            RUNTIME_STATIC
+        },
+    })
+}
+
+/// Panels are addressed by connector plus id, so the ids have to be usable in
+/// that address and distinct within the connector.
+fn validate_panels(manifest: &ConnectorManifest) -> Result<(), ValidationError> {
+    let Some(ui) = manifest.ui.as_ref() else {
+        return Ok(());
+    };
+    let mut seen: Vec<&str> = Vec::with_capacity(ui.panels.len());
+    for panel in &ui.panels {
+        if !is_well_formed_id(&panel.id) {
+            return Err(ValidationError::InvalidPanelId(panel.id.clone()));
+        }
+        if panel.name.trim().is_empty() {
+            return Err(ValidationError::EmptyPanelName(panel.id.clone()));
+        }
+        if seen.contains(&panel.id.as_str()) {
+            return Err(ValidationError::DuplicatePanelId(panel.id.clone()));
+        }
+        seen.push(&panel.id);
+    }
     Ok(())
 }
 

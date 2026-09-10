@@ -28,14 +28,24 @@ pub mod shape;
 pub mod types;
 pub mod validate;
 
-pub use types::{ConnectorManifest, ProviderMeta, ProviderQuirks};
+pub use types::{ConnectorManifest, PanelDeclaration, ProviderMeta, ProviderQuirks, UiBlock};
 pub use validate::ValidationError;
 
 /// Spec version this SDK targets.
 pub const SPEC_VERSION: u32 = 1;
 
-/// `connector_type` value supported by v1.
+/// `connector_type` for a connector the host starts a process from.
 pub const CONNECTOR_TYPE_MGP_SERVER: &str = "mgp_server";
 
-/// Sole package manager supported by v1.
+/// `connector_type` for a connector whose files the host serves and whose
+/// processes the host never starts (MGP_CONNECTOR.md §3.4).
+pub const CONNECTOR_TYPE_UI_MODULE: &str = "ui_module";
+
+/// Package manager for a connector the host builds.
 pub const PACKAGE_MANAGER_UV: &str = "uv";
+
+/// `package_manager` for a connector there is nothing to build.
+pub const PACKAGE_MANAGER_NONE: &str = "none";
+
+/// `runtime` for a connector there is nothing to launch.
+pub const RUNTIME_STATIC: &str = "static";

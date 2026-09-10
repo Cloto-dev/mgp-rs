@@ -55,6 +55,7 @@ fn manifest_with_full_optional_fields() -> ConnectorManifest {
                 switch_model_tool: None,
             }),
         }),
+        ui: None,
     }
 }
 
