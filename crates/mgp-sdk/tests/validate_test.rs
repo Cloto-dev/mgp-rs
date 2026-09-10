@@ -1,7 +1,7 @@
 //! Validation tests for `cloto-connector.json` v1.
 
 use mgp_sdk::adapters::{GitSpec, SourceSpec};
-use mgp_sdk::types::{ConnectorManifest, InstallSpec};
+use mgp_sdk::types::{ConnectorManifest, InstallSpec, PanelDeclaration, UiBlock};
 use mgp_sdk::validate::{validate_v1, ValidationError};
 
 fn good_manifest() -> ConnectorManifest {
@@ -36,6 +36,32 @@ fn good_manifest() -> ConnectorManifest {
         auto_restart: false,
         changelog: None,
         provider: None,
+        ui: None,
+    }
+}
+
+/// A connector that ships a panel and no server (MGP_CONNECTOR.md §3.4).
+fn panel_manifest() -> ConnectorManifest {
+    let mut m = good_manifest();
+    m.connector_type = "ui_module".to_string();
+    m.id = "published-viewer".to_string();
+    m.install.package_manager = "none".to_string();
+    m.install.runtime = "static".to_string();
+    m.ui = Some(UiBlock {
+        panels: vec![panel("console")],
+    });
+    m
+}
+
+fn panel(id: &str) -> PanelDeclaration {
+    PanelDeclaration {
+        id: id.to_string(),
+        name: "Console".to_string(),
+        description: String::new(),
+        version: String::new(),
+        entry: "index.html".to_string(),
+        icon: None,
+        requires: vec!["GET /api/published".to_string()],
     }
 }
 
@@ -162,4 +188,125 @@ fn rejects_invalid_git_source() {
         validate_v1(&m),
         Err(ValidationError::InvalidSource { kind: "git", .. })
     ));
+}
+
+// ── ui_module (MGP_CONNECTOR.md §3.4, §4.1, §5) ──────────────────────────────
+
+#[test]
+fn panel_only_connector_passes() {
+    assert_eq!(validate_v1(&panel_manifest()), Ok(()));
+}
+
+/// The half that stops a panel from claiming a runtime that would never run.
+/// Without it `connector_type` stops answering "does this start a process",
+/// because a `ui_module` could declare python and nothing would object.
+#[test]
+fn rejects_a_panel_connector_that_claims_a_runtime() {
+    let mut m = panel_manifest();
+    m.install.package_manager = "uv".to_string();
+    m.install.runtime = "python".to_string();
+    assert_eq!(
+        validate_v1(&m),
+        Err(ValidationError::InstallDisagreesWithType {
+            connector_type: "ui_module".to_string(),
+            package_manager: "uv".to_string(),
+            runtime: "python".to_string(),
+            expected_package_manager: "none",
+            expected_runtime: "static",
+        })
+    );
+}
+
+/// And the other half: a server that says it needs no build is a server the
+/// host cannot build.
+#[test]
+fn rejects_a_server_that_declares_nothing_to_build() {
+    let mut m = good_manifest();
+    m.install.package_manager = "none".to_string();
+    m.install.runtime = "static".to_string();
+    assert_eq!(
+        validate_v1(&m),
+        Err(ValidationError::InstallDisagreesWithType {
+            connector_type: "mgp_server".to_string(),
+            package_manager: "none".to_string(),
+            runtime: "static".to_string(),
+            expected_package_manager: "uv",
+            expected_runtime: "python|rust|node",
+        })
+    );
+}
+
+/// A mixed pair is still a disagreement — the check is on both fields, not on
+/// whichever one happens to be read first.
+#[test]
+fn rejects_a_panel_connector_that_agrees_only_halfway() {
+    let mut m = panel_manifest();
+    m.install.package_manager = "uv".to_string();
+    assert!(matches!(
+        validate_v1(&m),
+        Err(ValidationError::InstallDisagreesWithType { .. })
+    ));
+}
+
+#[test]
+fn a_server_may_also_ship_a_panel() {
+    let mut m = good_manifest();
+    m.ui = Some(UiBlock {
+        panels: vec![panel("dashboard")],
+    });
+    assert_eq!(validate_v1(&m), Ok(()));
+}
+
+#[test]
+fn rejects_two_panels_with_one_id() {
+    let mut m = panel_manifest();
+    m.ui = Some(UiBlock {
+        panels: vec![panel("console"), panel("console")],
+    });
+    assert_eq!(
+        validate_v1(&m),
+        Err(ValidationError::DuplicatePanelId("console".to_string()))
+    );
+}
+
+#[test]
+fn rejects_a_panel_id_outside_the_charset() {
+    let mut m = panel_manifest();
+    m.ui = Some(UiBlock {
+        panels: vec![panel("Console")],
+    });
+    assert_eq!(
+        validate_v1(&m),
+        Err(ValidationError::InvalidPanelId("Console".to_string()))
+    );
+}
+
+#[test]
+fn rejects_a_panel_with_no_name() {
+    let mut m = panel_manifest();
+    let mut p = panel("console");
+    p.name = "  ".to_string();
+    m.ui = Some(UiBlock { panels: vec![p] });
+    assert_eq!(
+        validate_v1(&m),
+        Err(ValidationError::EmptyPanelName("console".to_string()))
+    );
+}
+
+/// The block has to survive a round trip: a manifest read through this SDK and
+/// written back out must still carry its panels, or a consumer that edits a
+/// manifest would drop the face off every connector it touches.
+#[test]
+fn the_ui_block_round_trips() {
+    let json = serde_json::to_string(&panel_manifest()).expect("serialize");
+    assert!(json.contains("\"panels\""), "panels dropped on serialize");
+    let back: ConnectorManifest = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(back, panel_manifest());
+    // And a manifest without the block stays without it, rather than gaining
+    // an empty one that a diff would show as a change.
+    let plain = serde_json::to_string(&good_manifest()).expect("serialize");
+    assert!(
+        !plain.contains("\"ui\""),
+        "absent block should not be emitted"
+    );
 }
